@@ -5,6 +5,8 @@ pipeline {
         DEV_IMAGE = "anand20003/app-dev"
         PROD_IMAGE = "anand20003/app-prod"
         TAG = "${BUILD_NUMBER}"
+
+        DEPLOY_SERVER = "13.232.166.206"
     }
 
     stages {
@@ -18,6 +20,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
+
                     if (env.BRANCH_NAME == "dev") {
                         sh "docker build -t ${DEV_IMAGE}:${TAG} ."
                     }
@@ -25,6 +28,7 @@ pipeline {
                     if (env.BRANCH_NAME == "main") {
                         sh "docker build -t ${PROD_IMAGE}:${TAG} ."
                     }
+
                 }
             }
         }
@@ -66,7 +70,38 @@ pipeline {
                         docker push ${PROD_IMAGE}:latest
                         """
                     }
+
                 }
+            }
+        }
+
+        stage('Deploy to EC2') {
+
+            when {
+                branch 'main'
+            }
+
+            steps {
+
+                sshagent(['ec2-deploy-key']) {
+
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ec2-user@${DEPLOY_SERVER} '
+
+                    docker pull anand20003/app-prod:latest
+
+                    docker stop app || true
+
+                    docker rm app || true
+
+                    docker run -d \
+                    --name app \
+                    -p 80:80 \
+                    anand20003/app-prod:latest
+                    '
+                    """
+                }
+
             }
         }
     }
